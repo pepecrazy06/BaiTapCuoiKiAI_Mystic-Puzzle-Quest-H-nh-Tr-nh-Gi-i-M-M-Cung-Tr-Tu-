@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UTE Treasure Pathfinder AI - Python Flask</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PYTHON + HTML • AI SEARCH GAME</p>
+        <h1>UTE Treasure Pathfinder</h1>
+        <p class="subtitle">
+          Backend <b>Python Flask</b> xử lý thuật toán. Frontend <b>HTML/CSS/JS</b> chỉ vẽ map và hiển thị kết quả.
+          Nhân vật bắt đầu ở <b>KTX D</b>, goal là <b>Khối A.1</b>.
+        </p>
+      </div>
+      <div class="status-badge">
+        <span class="pulse"></span>
+        Python backend
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="side-panel">
+        <section class="card">
+          <h2>1. Nhiệm vụ</h2>
+          <div class="mission-row"><span>🚩 Start</span><b>KTX D</b></div>
+          <div class="mission-row"><span>💰 Goal</span><b>Khối A.1</b></div>
+          <div class="mission-row"><span>🧭 Luật</span><b>Chỉ đi qua node</b></div>
+          <p class="rule-note">
+            Không được đi xuyên qua <b>tòa nhà, tường, hồ, rừng</b>.
+            Gặp vật cản là phải <b>đi vòng theo hành lang / node hợp lệ</b>.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>2. Thuật toán Python</h2>
+          <div id="algorithmButtons" class="algorithm-grid"></div>
+
+          <label class="field-label" for="costMode">Hàm chi phí</label>
+          <select id="costMode">
+            <option value="distance">Khoảng cách ngắn nhất</option>
+            <option value="time">Thời gian di chuyển</option>
+            <option value="risk">Tránh vùng khó đi</option>
+            <option value="edge">Ít node nhất</option>
+          </select>
+
+          <div class="two-cols">
+            <label>Beam k<input id="beamWidth" type="number" value="2" min="1" max="6"></label>
+            <label>Depth<input id="depthLimit" type="number" value="80" min="3" max="200"></label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>3. Điều khiển</h2>
+          <button id="runBtn" class="btn primary">▶ Tìm đường bằng Python</button>
+          <button id="animateBtn" class="btn">🎮 Cho nhân vật di chuyển</button>
+          <button id="compareBtn" class="btn">📊 So sánh thuật toán</button>
+          <button id="resetBtn" class="btn ghost">↺ Đặt lại</button>
+
+          <div class="toggles">
+            <label><input id="showEdges" type="checkbox"> Hiện đường nối graph</label>
+            <label><input id="showVisited" type="checkbox" checked> Hiện node đã duyệt</label>
+            <label><input id="showLabels" type="checkbox"> Hiện tên node kỹ thuật</label>
+          </div>
+
+          <label class="field-label" for="speedRange">Tốc độ animate</label>
+          <input id="speedRange" type="range" min="80" max="650" value="260">
+        </section>
+      </aside>
+
+      <section class="map-stage">
+        <div class="map-toolbar">
+          <div>
+            <h2 id="mapTitle">Sẵn sàng tìm kho báu</h2>
+            <p id="mapSubtitle">Chọn thuật toán rồi bấm “Tìm đường”. Backend Python sẽ xử lý route.</p>
+          </div>
+          <div class="legend">
+            <span><i class="dot start"></i>Start</span>
+            <span><i class="dot node"></i>Node</span>
+            <span><i class="dot visited"></i>Đã duyệt</span>
+            <span><i class="line"></i>Route</span>
+          </div>
+        </div>
+
+        <div class="map-frame">
+          <div class="zoom-tools">
+            <button id="zoomIn">+</button>
+            <button id="zoomOut">−</button>
+            <button id="resetView">⌂</button>
+          </div>
+          <div class="map-help">Cuộn chuột để zoom • Kéo để pan • Chọn thuật toán rồi bấm chạy</div>
+
+          <svg id="gameSvg" viewBox="0 0 1448 1086" role="img" aria-label="UTE Treasure Pathfinder game map">
+            <defs>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="4" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity=".45"/>
+              </filter>
+            </defs>
+
+            <image href="/static/assets/ute_fantasy_map.png" x="0" y="0" width="1448" height="1086" preserveAspectRatio="xMidYMid meet"/>
+            <g id="edgeLayer"></g>
+            <g id="visitedLayer"></g>
+            <g id="routeLayer"></g>
+            <g id="nodeLayer"></g>
+            <g id="markerLayer"></g>
+            <g id="tempNodeLayer"></g>
+            <g id="effectLayer"></g>
+            <g id="playerLayer"></g>
+          </svg>
+        </div>
+      </section>
+
+      <aside class="result-panel">
+        <section class="card result-main">
+          <p class="eyebrow">Kết quả Python</p>
+          <h2 id="resultStatus">Chưa chạy</h2>
+          <div class="stats">
+            <div><span>Thuật toán</span><b id="statAlgo">--</b></div>
+            <div><span>Nodes duyệt</span><b id="statExpanded">--</b></div>
+            <div><span>Chi phí</span><b id="statCost">--</b></div>
+            <div><span>Runtime</span><b id="statRuntime">--</b></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Giải thích</h2>
+          <p id="explainText" class="explain">Chạy thuật toán để xem mô tả.</p>
+        </section>
+
+        <section class="card">
+          <h2>Route tìm được</h2>
+          <ol id="pathList" class="path-list"></ol>
+        </section>
+
+        <section class="card">
+          <h2>So sánh</h2>
+          <div class="table-wrap">
+            <table id="compareTable">
+              <thead><tr><th>TT</th><th>Found</th><th>Duyệt</th><th>Cost</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="dungeonOverlay" class="dungeon-overlay hidden">
+    <div class="dungeon-window hgl02-window">
+      <div class="dungeon-window-head">
+        <div>
+          <p id="dungeonEyebrow" class="eyebrow">HGL02 • AND-OR SEARCH</p>
+          <h2 id="dungeonTitle">Hầm ngục AND-OR HGL02</h2>
+          <p id="dungeonStatus" class="explain">
+            HGL02 dùng AND-OR Search. H01 là điểm bắt đầu, H58 là đích thoát khỏi hầm ngục.
+          </p>
+        </div>
+        <button id="closeDungeonBtn" class="btn ghost">Đóng</button>
+      </div>
+
+      <div class="dungeon-stats-row">
+        <div><span>Session</span><b id="dungeonSession">--</b></div>
+        <div><span>Belief còn</span><b id="dungeonSeen">0</b></div>
+        <div><span>Action</span><b id="dungeonHidden">--</b></div>
+      </div>
+
+      <div id="hgl02RunControls" class="dun02-editor-controls">
+        <div class="dun02-editor-row">
+          <button id="hgl02SolveFixedBtn" class="btn primary" type="button">▶ Chạy thuật toán hầm ngục</button>
+          <button id="hgl02ResetViewBtn" class="btn ghost" type="button">Làm mới hiển thị</button>
+          <span class="rule-note"><span id="dungeonRuleText">Map HGL02 đã cố định: Start = H01, Goal = EXIT.</span></span>
+        </div>
+      </div>
+
+      <div class="hgl02-map-wrap">
+        <svg id="hgl02Svg" viewBox="0 0 1920 768" role="img" aria-label="HGL02 belief dungeon map">
+          <defs>
+            <filter id="hgl02Glow">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <image id="hgl02Bg" href="" x="0" y="0" width="1920" height="768" preserveAspectRatio="xMidYMid meet"></image>
+          <g id="hgl02EdgeLayer"></g>
+          <g id="hgl02DecoLayer"></g>
+          <g id="hgl02RouteLayer"></g>
+          <g id="hgl02NodeLayer"></g>
+          <g id="hgl02PlayerLayer"></g>
+        </svg>
+      </div>
+
+      <div class="dun02-map-wrap hidden">
+        <svg id="dun02Svg" viewBox="0 0 1600 1200" role="img" aria-label="DUN02 dungeon map">
+          <defs>
+            <filter id="dun02Glow">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <image id="dun02Bg" href="" x="0" y="0" width="1600" height="1200" preserveAspectRatio="xMidYMid meet"></image>
+          <g id="dun02EdgeLayer"></g>
+          <g id="dun02DecoLayer"></g>
+          <g id="dun02RouteLayer"></g>
+          <g id="dun02NodeLayer"></g>
+          <g id="dun02PlayerLayer"></g>
+        </svg>
+      </div>
+
+
+      <div class="fb04-map-wrap hidden">
+        <svg id="fb04Svg" viewBox="0 0 2048 1536" role="img" aria-label="FB04 belief BFS dungeon map">
+          <defs>
+            <filter id="fb04Glow">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <image id="fb04Bg" href="" x="0" y="0" width="2048" height="1536" preserveAspectRatio="xMidYMid meet"></image>
+          <g id="fb04EdgeLayer"></g>
+          <g id="fb04RouteLayer"></g>
+          <g id="fb04NodeLayer"></g>
+          <g id="fb04PlayerLayer"></g>
+        </svg>
+      </div>
+
+      <ol id="dungeonLog" class="path-list dungeon-log"></ol>
+    </div>
+  </div>
+
+  <div id="andorOverlay" class="dungeon-overlay hidden">
+    <div class="dungeon-window andor-window">
+      <div class="dungeon-window-head">
+        <div>
+          <p class="eyebrow">M26 • AND-OR SEARCH</p>
+          <h2>Hầm ngục Cửa Số Phận</h2>
+          <p id="andorStatus" class="explain">
+            Nếu route đi ngang M26, AI sẽ vào hầm ngục bất định. Hầm ngục có nhiều lối thoát và có bẫy reset về đầu.
+          </p>
+        </div>
+        <button id="closeAndorBtn" class="btn ghost">Đóng</button>
+      </div>
+
+      <div class="andor-svg-wrap">
+        <svg id="andorSvg" viewBox="0 0 700 430" role="img" aria-label="AND-OR dungeon">
+          <rect x="0" y="0" width="700" height="430" rx="18" class="andor-bg"/>
+          <g id="andorEdgeLayer"></g>
+          <g id="andorNodeLayer"></g>
+        </svg>
+      </div>
+
+      <div class="andor-plan-box">
+        <h3>Kế hoạch điều kiện</h3>
+        <div id="andorPlan">Chưa chạy.</div>
+      </div>
+
+      <ol id="andorLog" class="path-list dungeon-log"></ol>
+    </div>
+  </div>
+
+
+
+  <script src="/static/js/app.js"></script>
+
+  <section id="bossOverlay" class="boss-overlay hidden" aria-modal="true" role="dialog">
+    <div class="boss-panel">
+      <div class="boss-header">
+        <div>
+          <p class="eyebrow">FINAL BOSS • MINIMAX</p>
+          <h2>Trận chiến Rồng giữ kho báu</h2>
+          <p class="boss-rule">Knight = MAX, Dragon = MIN. Rồng dùng Minimax để phun lửa chặn đường.</p>
+        </div>
+        <button id="closeBossBtn" class="btn ghost" type="button">Đóng</button>
+      </div>
+
+      <div class="boss-layout">
+        <div id="bossBoardWrap" class="boss-board-wrap">
+          <img class="boss-arena-bg" src="/static/assets/boss_arena_map.png" alt="Đấu trường boss" />
+          <div id="bossBoard" class="boss-board"></div>
+          <div id="bossFireball" class="boss-fireball hidden" aria-hidden="true"><span class="boss-fireball-core"></span></div>
+        </div>
+
+        <aside class="boss-side">
+          <div class="stat-card">
+            <span>Phiên boss</span>
+            <strong id="bossSession">--</strong>
+          </div>
+          <div class="stat-card">
+            <span>Lượt</span>
+            <strong id="bossTurn">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Trạng thái</span>
+            <strong id="bossStatus">--</strong>
+          </div>
+          <button id="bossNewBtn" class="btn primary" type="button">Tạo trận Boss</button>
+          <button id="bossAutoBtn" class="btn" type="button">▶ Chạy tự động Minimax</button>
+          <ol id="bossLog" class="path-list boss-log"></ol>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>
